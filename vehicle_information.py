@@ -1,31 +1,34 @@
 #!/usr/bin/env python3
 """
 VEHICLE_INFORMATION (AZOD08)
-Author : azod08
-License: MIT
+Author  : azod08
+License : MIT
 
 Educational & Ethical Use Only
 """
 
 import os
-import sys
 import json
 import time
 import hashlib
 import requests
 from datetime import datetime
 from urllib.parse import urlencode
+
 from rich.console import Console
 from rich.table import Table
 from rich.panel import Panel
 from rich.align import Align
+from rich.prompt import Prompt
 from rich import box
 
+# ================= CONFIG =================
+
 API_BASE = "https://vehicleinfobyterabaap.vercel.app/lookup"
-VERSION = "1.0"
+VERSION = "1.1"
 console = Console()
 
-# ------------------ BASIC UTILS ------------------
+# ================= UTILS =================
 
 def clear():
     os.system("cls" if os.name == "nt" else "clear")
@@ -38,34 +41,42 @@ def log(msg):
     with open("logs/activity.log", "a") as f:
         f.write(f"[{datetime.now()}] {msg}\n")
 
-def cache_file(rc):
+def cache_path(rc):
     return f"cache/{hashlib.md5(rc.encode()).hexdigest()}.json"
 
-# ------------------ UI ------------------
+def mask_phone(phone):
+    phone = str(phone)
+    if len(phone) > 4:
+        return phone[:-4] + "XXXX"
+    return phone
+
+# ================= UI =================
 
 def banner():
     console.rule("[bold cyan]VEHICLE INFORMATION (AZOD08)")
     console.print(
         Align.center(
-            f"[bold]Professional Vehicle Lookup Tool[/bold]\nVersion: {VERSION}\nAuthor: azod08"
+            f"[bold white]Professional Vehicle OSINT Tool[/bold white]\n"
+            f"[dim]Version {VERSION} • Author: azod08[/dim]"
         )
     )
     console.print(
         Panel(
-            "This tool is strictly for educational and lawful use.\n"
+            "[bold red]DISCLAIMER[/bold red]\n"
+            "This tool is for educational and lawful use only.\n"
             "Unauthorized usage may be illegal.",
-            title="DISCLAIMER",
             style="red",
         )
     )
     console.rule()
 
-# ------------------ CORE LOGIC ------------------
+# ================= CORE =================
 
 def fetch_data(rc):
-    cached = cache_file(rc)
-    if os.path.exists(cached):
-        with open(cached) as f:
+    cache_file = cache_path(rc)
+
+    if os.path.exists(cache_file):
+        with open(cache_file) as f:
             return json.load(f), True
 
     url = f"{API_BASE}?{urlencode({'rc': rc})}"
@@ -79,29 +90,41 @@ def fetch_data(rc):
 
     data["_response_time_ms"] = round((time.time() - start) * 1000, 2)
 
-    with open(cached, "w") as f:
+    with open(cache_file, "w") as f:
         json.dump(data, f, indent=4)
 
     return data, False
 
 def display(rc, data, cached):
     if "error" in data:
-        console.print(Panel(f"[red]{data['error']}[/red]", title="ERROR"))
+        console.print(Panel(f"[bold red]{data['error']}[/bold red]", title="ERROR"))
         return
 
-    status = f"Cached: {'YES' if cached else 'NO'}\nResponse Time: {data.pop('_response_time_ms')} ms"
-    console.print(Panel(status, title="STATUS", style="green"))
+    response_time = data.pop("_response_time_ms", "N/A")
 
-    table = Table(
-        title=f"Vehicle Information — {rc}",
-        box=box.SQUARE,
-        show_lines=True
+    console.print(
+        Panel(
+            f"[bold green]API Status:[/bold green] OK\n"
+            f"[bold cyan]Cached:[/bold cyan] {'YES' if cached else 'NO'}\n"
+            f"[bold yellow]Response Time:[/bold yellow] {response_time} ms",
+            title="STATUS",
+            style="green",
+        )
     )
 
-    table.add_column("Field", style="cyan", no_wrap=True)
-    table.add_column("Value", style="white")
+    table = Table(
+        title=f"[bold yellow]Vehicle Information — {rc}[/bold yellow]",
+        box=box.ROUNDED,
+        header_style="bold magenta",
+        show_lines=True,
+    )
+
+    table.add_column("Field", style="bold cyan", no_wrap=True)
+    table.add_column("Value", style="bold white")
 
     for k, v in data.items():
+        if k.lower() == "phone":
+            v = mask_phone(v)
         table.add_row(k.replace("_", " ").title(), str(v))
 
     console.print(table)
@@ -109,23 +132,40 @@ def display(rc, data, cached):
     with open(f"results/{rc}.json", "w") as f:
         json.dump(data, f, indent=4)
 
-# ------------------ MAIN ------------------
+    console.print(
+        Panel(
+            Align.center(
+                "[bold white]VEHICLE_INFORMATION (AZOD08)\n"
+                "[dim]Built for learning • Powered by ethics[/dim]"
+            ),
+            style="blue",
+        )
+    )
+
+# ================= MAIN =================
 
 def main():
     ensure_dirs()
     clear()
     banner()
 
-    rc = input("\nEnter Vehicle RC Number: ").strip()
+    rc = Prompt.ask(
+        "[bold cyan]Enter Vehicle RC Number[/bold cyan]"
+    ).strip().upper()
+
     if not rc:
-        console.print("[red]RC number is required.[/red]")
+        console.print("[bold red]RC number is required. Exiting.[/bold red]")
         return
 
     log(f"Lookup started for RC: {rc}")
+
+    console.print("\n[bold green]Fetching vehicle information...[/bold green]\n")
+    time.sleep(0.4)
+
     data, cached = fetch_data(rc)
     display(rc, data, cached)
-    log(f"Lookup finished for RC: {rc}")
 
+    log(f"Lookup finished for RC: {rc}")
     console.print("\n[bold green]Done.[/bold green]")
 
 if __name__ == "__main__":
